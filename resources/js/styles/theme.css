@@ -1,0 +1,33 @@
+body {
+  background: linear-gradient(135deg, #eef9f6 0%, #f4fbff 100%);
+  color: #243943;
+}
+
+.btn-theme {
+  background: linear-gradient(135deg, #5db7a7 0%, #6a90f0 100%);
+  color: white;
+  border: none;
+}
+
+.btn-theme:hover {
+  color: white;
+  opacity: 0.96;
+}
+
+.card-soft {
+  border: none;
+  border-radius: 22px;
+  box-shadow: 0 12px 28px rgba(70, 120, 130, 0.08);
+}
+
+.form-control,
+.form-select {
+  border-radius: 14px;
+  border-color: #d7e7ea;
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: #6a90f0;
+  box-shadow: 0 0 0 0.2rem rgba(106, 144, 240, 0.12);
+}
