@@ -5,14 +5,17 @@
       <div class="mt-2 text-muted">Загрузка задачи...</div>
     </div>
 
-    <div v-else-if="task">
-      <div class="card-soft bg-white p-3 p-md-4 mb-3">
+    <div v-else-if="task" class="task-details-page">
+      <div class="card-soft p-3 task-summary-card mb-3">
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
-          <div>
+          <div class="task-summary-main">
             <div class="text-muted small mb-1">Задача #{{ task.id }}</div>
-            <h1 class="h4 mb-2">{{ task.title }}</h1>
+            <h1 class="task-summary-title mb-2">{{ task.title }}</h1>
+            <p class="task-summary-copy mb-0">
+              Основной контекст, статусы, файлы и обсуждение собраны в одном месте, чтобы по задаче было легко ориентироваться.
+            </p>
 
-            <div class="d-flex flex-wrap gap-2">
+            <div class="d-flex flex-wrap gap-2 task-badges">
               <span class="badge text-bg-primary">
                 {{ task.status?.name || '—' }}
               </span>
@@ -43,10 +46,21 @@
             </div>
           </div>
 
-          <div class="d-flex flex-wrap gap-2">
+          <div class="d-flex flex-wrap gap-2 task-summary-actions">
+            <select
+              v-if="canChangeStatus && !isEditing"
+              class="form-select form-select-sm task-status-select"
+              :value="task.status_id"
+              @change="changeStatus($event)"
+            >
+              <option v-for="status in statuses" :key="status.id" :value="status.id">
+                {{ status.name }}
+              </option>
+            </select>
+
             <button
               v-if="canEdit && activeTab === 'general' && !isEditing"
-              class="btn btn-theme"
+              class="btn btn-theme btn-sm"
               @click="startEdit"
             >
               Редактировать
@@ -54,7 +68,7 @@
 
             <button
               v-if="canEdit && activeTab === 'general' && isEditing"
-              class="btn btn-success"
+              class="btn btn-success btn-sm"
               :disabled="saving"
               @click="saveTask"
             >
@@ -63,7 +77,7 @@
 
             <button
               v-if="canEdit && activeTab === 'general' && isEditing"
-              class="btn btn-outline-secondary"
+              class="btn btn-outline-secondary btn-sm"
               @click="cancelEdit"
             >
               Отмена
@@ -71,20 +85,20 @@
 
             <button
                 v-if="canCompleteTask"
-                class="btn btn-success"
+                class="btn btn-success btn-sm"
                 @click="openCompleteModal"
               >
                 Завершить работу
               </button>
-            <RouterLink to="/tasks" class="btn btn-outline-secondary">
+            <RouterLink to="/tasks" class="btn btn-outline-secondary btn-sm">
               Назад
             </RouterLink>
           </div>
         </div>
       </div>
 
-      <div class="card-soft bg-white p-3">
-        <ul class="nav nav-tabs mb-3" role="tablist">
+      <div class="card-soft p-3 detail-panel">
+        <ul class="nav nav-tabs detail-tabs mb-3" role="tablist">
           <li class="nav-item">
             <button
               class="nav-link"
@@ -119,10 +133,10 @@
           </li>
         </ul>
 
-        <div v-if="activeTab === 'general'" class="row g-3">
-          <div class="col-12 col-xl-8">
+        <div v-if="activeTab === 'general'" class="row g-3 detail-tab-panel detail-tab-scroll">
+          <div class="col-12 col-xl-7">
             <div class="card border-0 shadow-sm h-100">
-              <div class="card-header bg-white py-3">
+              <div class="card-header bg-white py-2">
                 <h6 class="mb-0">Основная информация</h6>
               </div>
 
@@ -275,9 +289,9 @@
               <div>{{ fullName(task.completed_by) || '—' }}</div>
             </div>
           </div>
-          <div class="col-12 col-xl-4">
+          <div class="col-12 col-xl-5">
             <div class="card border-0 shadow-sm">
-              <div class="card-header bg-white py-3">
+              <div class="card-header bg-white py-2">
                 <h6 class="mb-0">Исполнители</h6>
               </div>
               <div class="card-body py-2">
@@ -303,17 +317,17 @@
           </div>
         </div>
 
-        <div v-if="activeTab === 'discussion'" class="row g-3">
-          <div class="col-12 col-xl-7">
+        <div v-if="activeTab === 'discussion'" class="row g-3 detail-tab-panel discussion-layout">
+          <div class="col-12 col-xl-8 discussion-column">
             <TaskChat :task-id="Number(id)" compact />
           </div>
 
-          <div class="col-12 col-xl-5">
+          <div class="col-12 col-xl-4 discussion-column">
             <div class="card border-0 shadow-sm history-panel">
-              <div class="card-header bg-white py-3">
+              <div class="card-header bg-white py-2">
                 <h6 class="mb-0">История изменений</h6>
               </div>
-              <div class="card-body history-scroll py-3">
+              <div class="card-body history-scroll py-2">
                 <div v-if="!task.histories?.length" class="text-muted">
                   История изменений отсутствует
                 </div>
@@ -336,7 +350,7 @@
           </div>
         </div>
 
-        <div v-if="activeTab === 'files'">
+        <div v-if="activeTab === 'files'" class="detail-tab-panel detail-tab-scroll">
           <TaskFiles :task-id="Number(id)" />
         </div>
       </div>
@@ -457,6 +471,17 @@ const canEdit = computed(() => {
   return currentUser.value.id === task.value.creator_id || hasAdminRole(currentUser.value);
 });
 
+const canChangeStatus = computed(() => {
+  if (!task.value || !currentUser.value) return false;
+
+  const isAdmin = hasAdminRole(currentUser.value);
+  const isCreator = currentUser.value.id === task.value.creator_id;
+  const isPerformer = Array.isArray(task.value.performers) &&
+    task.value.performers.some(user => user.id === currentUser.value.id);
+
+  return isAdmin || isCreator || isPerformer;
+});
+
 const hasAdminRole = (user) => {
   return Array.isArray(user?.roles) && user.roles.some(role => role.name === 'admin');
 };
@@ -567,6 +592,21 @@ const saveTask = async () => {
       error?.response?.data?.message || 'Не удалось сохранить изменения';
   } finally {
     saving.value = false;
+  }
+};
+
+const changeStatus = async (event) => {
+  const statusId = Number(event.target.value);
+
+  try {
+    await window.axios.put(`/api/tasks/${props.id}`, {
+      status_id: statusId,
+    });
+
+    await loadTask();
+  } catch (error) {
+    errorMessage.value =
+      error?.response?.data?.message || 'Не удалось обновить статус задачи';
   }
 };
 
@@ -707,41 +747,150 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.task-details-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.task-summary-card {
+  border-radius: 20px;
+  flex: 0 0 auto;
+}
+
+.task-summary-main {
+  min-width: 0;
+}
+
+.task-summary-title {
+  font-size: clamp(1.2rem, 2vw, 1.55rem);
+  line-height: 1.25;
+  font-weight: 800;
+  color: var(--text-1);
+}
+
+.task-summary-copy {
+  max-width: 64ch;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.task-badges {
+  margin-top: 12px;
+}
+
+.task-summary-actions {
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+
+.task-status-select {
+  min-width: 240px;
+  height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background:
+    radial-gradient(circle at left center, rgba(38, 103, 255, 0.08), transparent 26%),
+    linear-gradient(180deg, var(--surface-2) 0%, var(--surface-1) 100%);
+  font-weight: 700;
+  padding-left: 14px;
+  padding-right: 36px;
+  box-shadow: var(--shadow-soft);
+}
+
+.detail-panel {
+  border-radius: 20px;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.detail-tabs {
+  display: inline-flex;
+  gap: 8px;
+  padding: 4px;
+  border: none;
+  border-radius: 16px;
+  background: var(--surface-1);
+  flex: 0 0 auto;
+}
+
 .nav-tabs .nav-link {
-  padding-top: 0.6rem;
-  padding-bottom: 0.6rem;
-  border-radius: 10px 10px 0 0;
-  color: #40606a;
+  padding: 0.5rem 0.85rem;
+  border-radius: 12px;
+  color: var(--text-2);
   font-weight: 600;
+  border: none;
+  font-size: 0.9rem;
 }
 
 .nav-tabs .nav-link.active {
-  color: #23414b;
-  background: #f8fffd;
+  color: var(--text-1);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-soft);
+}
+
+.detail-tab-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.detail-tabs.mb-3 {
+  margin-bottom: 0.75rem !important;
+}
+
+.detail-tab-scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
 }
 
 .performer-item {
   padding: 10px 0;
-  border-bottom: 1px solid rgba(120, 150, 160, 0.14);
+  border-bottom: 1px solid var(--border-soft);
 }
 
 .performer-item:last-child {
   border-bottom: none;
 }
 
+.discussion-layout {
+  align-items: stretch;
+  display: flex;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.discussion-column {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .history-panel {
-  min-height: 520px;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
 }
 
 .history-scroll {
-  max-height: 460px;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
   overflow-y: auto;
 }
 
 .history-item {
   padding: 0 0 12px;
   margin-bottom: 12px;
-  border-bottom: 1px solid rgba(120, 150, 160, 0.14);
+  border-bottom: 1px solid var(--border-soft);
 }
 
 .history-item:last-child {
@@ -758,12 +907,43 @@ onMounted(async () => {
 }
 
 @media (max-width: 1199px) {
+  .discussion-layout {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
   .history-panel {
-    min-height: 360px;
+    min-height: 420px;
+    max-height: 500px;
   }
 
   .history-scroll {
-    max-height: 320px;
+    max-height: 440px;
+  }
+}
+
+@media (max-width: 992px) {
+  .task-details-page {
+    height: auto;
+    overflow: visible;
+  }
+
+  .detail-panel {
+    overflow: visible;
+  }
+
+  .detail-tab-panel,
+  .detail-tab-scroll {
+    overflow: visible;
+  }
+
+  .task-summary-actions {
+    justify-content: flex-start;
+  }
+
+  .task-status-select {
+    min-width: 100%;
   }
 }
 </style>

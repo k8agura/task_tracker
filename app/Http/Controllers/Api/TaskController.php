@@ -3,20 +3,22 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\CompleteTaskRequest;
 use App\Http\Requests\StoreTaskRequest;
 use App\Http\Requests\UpdateTaskRequest;
 use App\Models\Chat;
 use App\Models\Task;
 use App\Models\TaskHistory;
+use App\Models\TaskStatus;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
-use App\Http\Requests\CompleteTaskRequest;
-use App\Models\TaskStatus;
+use Illuminate\Support\Facades\DB;
 
 class TaskController extends Controller implements HasMiddleware
 {
+    private const TERMINAL_STATUS_CODES = ['done', 'cancelled'];
+
     public static function middleware(): array
     {
         return [
@@ -41,12 +43,12 @@ class TaskController extends Controller implements HasMiddleware
         if (!$user->hasRole('admin') && $user->department_id) {
             $query->where(function ($q) use ($user) {
                 $q->where('creator_id', $user->id)
-                ->orWhereHas('performers', function ($subQ) use ($user) {
-                    $subQ->where('users.id', $user->id);
-                })
-                ->orWhereHas('creator', function ($subQ) use ($user) {
-                    $subQ->where('department_id', $user->department_id);
-                });
+                    ->orWhereHas('performers', function ($subQ) use ($user) {
+                        $subQ->where('users.id', $user->id);
+                    })
+                    ->orWhereHas('creator', function ($subQ) use ($user) {
+                        $subQ->where('department_id', $user->department_id);
+                    });
             });
         }
 
@@ -73,7 +75,7 @@ class TaskController extends Controller implements HasMiddleware
             $search = trim($request->input('search'));
             $query->where(function ($q) use ($search) {
                 $q->where('title', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%");
+                    ->orWhere('description', 'like', "%{$search}%");
             });
         }
 
@@ -109,9 +111,7 @@ class TaskController extends Controller implements HasMiddleware
                 break;
         }
 
-        return response()->json(
-            $query->paginate(15)
-        );
+        return response()->json($query->paginate(15));
     }
 
     public function store(StoreTaskRequest $request)
@@ -126,13 +126,7 @@ class TaskController extends Controller implements HasMiddleware
             $task = Task::create($data);
 
             if (!empty($performers)) {
-                $syncData = [];
-                foreach ($performers as $performer) {
-                    $syncData[$performer['user_id']] = [
-                        'role' => $performer['role'] ?? 'executor',
-                    ];
-                }
-                $task->performers()->sync($syncData);
+                $task->performers()->sync($this->buildSyncData($performers));
             }
 
             Chat::create([
@@ -160,6 +154,7 @@ class TaskController extends Controller implements HasMiddleware
     public function show(Task $task)
     {
         $user = request()->user();
+
         if (
             !$user->hasRole('admin') &&
             $user->department_id &&
@@ -171,6 +166,7 @@ class TaskController extends Controller implements HasMiddleware
                 'message' => 'Доступ к задаче запрещён',
             ], 403);
         }
+
         return response()->json(
             $task->load([
                 'status',
@@ -185,22 +181,18 @@ class TaskController extends Controller implements HasMiddleware
             ])
         );
     }
-    
+
     public function complete(CompleteTaskRequest $request, Task $task)
     {
         $user = $request->user();
 
-        $isAdmin = $user->hasRole('admin');
-        $isCreator = $task->creator_id === $user->id;
-        $isPerformer = $task->performers()->where('users.id', $user->id)->exists();
-
-        if (!$isAdmin && !$isCreator && !$isPerformer) {
+        if (!$this->canChangeStatus($task, $user)) {
             return response()->json([
                 'message' => 'Завершать задачу может только её исполнитель, создатель или администратор',
             ], 403);
         }
 
-        if (in_array($task->status?->code, ['done', 'cancelled'])) {
+        if (in_array($task->status?->code, self::TERMINAL_STATUS_CODES, true)) {
             return response()->json([
                 'message' => 'Эта задача уже завершена и не может быть завершена повторно',
             ], 422);
@@ -251,29 +243,59 @@ class TaskController extends Controller implements HasMiddleware
     public function update(UpdateTaskRequest $request, Task $task)
     {
         $user = $request->user();
-
-        if (!$user->hasRole('admin') && $task->creator_id !== $user->id) {
-            return response()->json([
-                'message' => 'Редактировать задачу может только её создатель или администратор',
-            ], 403);
-        }
         $data = $request->validated();
         $performers = $data['performers'] ?? null;
         unset($data['performers']);
 
+        $isAdmin = $user->hasRole('admin');
+        $isCreator = $task->creator_id === $user->id;
+        $isPerformer = $task->performers()->where('users.id', $user->id)->exists();
+
+        if (!$isAdmin && !$isCreator && !$isPerformer) {
+            return response()->json([
+                'message' => 'Редактировать задачу может только её создатель, исполнитель или администратор',
+            ], 403);
+        }
+
+        if (!$isAdmin && !$isCreator) {
+            $forbiddenFields = array_diff(array_keys($data), ['status_id']);
+
+            if (!empty($forbiddenFields) || is_array($performers)) {
+                return response()->json([
+                    'message' => 'Исполнитель может менять только статус задачи',
+                ], 403);
+            }
+        }
+
+        if (array_key_exists('status_id', $data) && !$this->canChangeStatus($task, $user)) {
+            return response()->json([
+                'message' => 'Изменять статус может только создатель, исполнитель или администратор',
+            ], 403);
+        }
+
         $updatedTask = DB::transaction(function () use ($task, $data, $performers, $request) {
-            $oldValues = $task->fresh()->load('performers')->toArray();
+            $oldTask = $task->fresh()->load('status', 'performers');
+            $oldValues = $oldTask->toArray();
+            $oldStatusCode = $oldTask->status?->code;
+
+            if (array_key_exists('status_id', $data)) {
+                $nextStatus = TaskStatus::find($data['status_id']);
+                $nextStatusCode = $nextStatus?->code;
+
+                if ($nextStatusCode && in_array($nextStatusCode, self::TERMINAL_STATUS_CODES, true)) {
+                    $data['completed_at'] = now();
+                    $data['completed_by'] = $request->user()->id;
+                } elseif ($nextStatusCode && in_array($oldStatusCode, self::TERMINAL_STATUS_CODES, true)) {
+                    $data['completed_at'] = null;
+                    $data['completed_by'] = null;
+                    $data['completion_report'] = null;
+                }
+            }
 
             $task->update($data);
 
             if (is_array($performers)) {
-                $syncData = [];
-                foreach ($performers as $performer) {
-                    $syncData[$performer['user_id']] = [
-                        'role' => $performer['role'] ?? 'executor',
-                    ];
-                }
-                $task->performers()->sync($syncData);
+                $task->performers()->sync($this->buildSyncData($performers));
             }
 
             TaskHistory::create([
@@ -281,8 +303,8 @@ class TaskController extends Controller implements HasMiddleware
                 'user_id' => $request->user()->id,
                 'action' => 'updated',
                 'old_values' => $oldValues,
-                'new_values' => $task->fresh()->load('performers')->toArray(),
-                'comment' => 'Задача обновлена',
+                'new_values' => $task->fresh()->load('status', 'performers')->toArray(),
+                'comment' => $this->buildUpdateComment($oldTask, $task->fresh()->load('status', 'performers'), is_array($performers)),
             ]);
 
             return $task;
@@ -296,11 +318,13 @@ class TaskController extends Controller implements HasMiddleware
     public function destroy(Request $request, Task $task)
     {
         $user = $request->user();
+
         if (!$user->hasRole('admin') && $task->creator_id !== $user->id) {
             return response()->json([
                 'message' => 'Удалять задачу может только её создатель или администратор',
             ], 403);
         }
+
         DB::transaction(function () use ($task, $request) {
             TaskHistory::create([
                 'task_id' => $task->id,
@@ -317,5 +341,48 @@ class TaskController extends Controller implements HasMiddleware
         return response()->json([
             'message' => 'Задача удалена',
         ]);
+    }
+
+    private function canChangeStatus(Task $task, $user): bool
+    {
+        return $user->hasRole('admin')
+            || $task->creator_id === $user->id
+            || $task->performers()->where('users.id', $user->id)->exists();
+    }
+
+    private function buildSyncData(array $performers): array
+    {
+        $syncData = [];
+
+        foreach ($performers as $performer) {
+            $syncData[$performer['user_id']] = [
+                'role' => $performer['role'] ?? 'executor',
+            ];
+        }
+
+        return $syncData;
+    }
+
+    private function buildUpdateComment(Task $oldTask, Task $newTask, bool $performersChanged): string
+    {
+        $oldStatusCode = $oldTask->status?->code;
+        $newStatusCode = $newTask->status?->code;
+
+        if ($oldStatusCode !== $newStatusCode) {
+            if (
+                in_array($oldStatusCode, self::TERMINAL_STATUS_CODES, true)
+                && !in_array($newStatusCode, self::TERMINAL_STATUS_CODES, true)
+            ) {
+                return 'Задача переоткрыта';
+            }
+
+            return 'Статус задачи изменён';
+        }
+
+        if ($performersChanged) {
+            return 'Обновлены исполнители задачи';
+        }
+
+        return 'Задача обновлена';
     }
 }

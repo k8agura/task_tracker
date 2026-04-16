@@ -51,13 +51,13 @@
         </div>
 
         <div class="d-flex gap-2">
-          <a
+          <button
+            type="button"
             class="btn btn-sm btn-outline-primary"
-            :href="`/api/attachments/${attachment.id}/download`"
-            target="_blank"
+            @click="downloadAttachment(attachment)"
           >
             Скачать
-          </a>
+          </button>
           <button class="btn btn-sm btn-outline-danger" @click="removeAttachment(attachment.id)">
             Удалить
           </button>
@@ -95,7 +95,7 @@ const formatDate = (value) => {
 };
 
 const formatSize = (bytes) => {
-  if (!bytes && bytes !== 0) return '—';
+  if (!bytes && bytes !== 0) return '-';
   if (bytes < 1024) return `${bytes} Б`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
@@ -143,6 +143,25 @@ const uploadFile = async () => {
     errorMessage.value = 'Не удалось загрузить файл';
   } finally {
     uploading.value = false;
+  }
+};
+
+const downloadAttachment = async (attachment) => {
+  try {
+    const response = await window.axios.get(`/api/attachments/${attachment.id}/download`, {
+      responseType: 'blob',
+    });
+
+    const blobUrl = window.URL.createObjectURL(response.data);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = attachment.original_name || `attachment-${attachment.id}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(blobUrl);
+  } catch (error) {
+    errorMessage.value = 'Не удалось скачать файл';
   }
 };
 

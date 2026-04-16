@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import LoginView from '../views/LoginView.vue';
+import DashboardView from '../views/DashboardView.vue';
 import TasksView from '../views/TasksView.vue';
 import TaskDetailsView from '../views/TaskDetailsView.vue';
 import UsersView from '../views/UsersView.vue';
@@ -16,7 +17,13 @@ const routes = [
     },
     {
         path: '/',
-        redirect: '/tasks',
+        redirect: '/dashboard',
+    },
+    {
+        path: '/dashboard',
+        name: 'dashboard',
+        component: DashboardView,
+        meta: { requiresAuth: true },
     },
     {
         path: '/tasks',
@@ -67,7 +74,7 @@ router.beforeEach(async (to) => {
     }
 
     if (to.meta.guest && auth) {
-        return '/tasks';
+        return '/dashboard';
     }
 
     if (to.meta.requiresAdmin) {
@@ -82,10 +89,10 @@ router.beforeEach(async (to) => {
             const isAdmin = Array.isArray(user?.roles) && user.roles.some(role => role.name === 'admin');
 
             if (!isAdmin) {
-                return '/tasks';
+                return '/dashboard';
             }
         } catch (e) {
-            return '/tasks';
+            return '/dashboard';
         }
     }
 });

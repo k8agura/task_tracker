@@ -1,11 +1,6 @@
 <template>
   <AppLayout>
-    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
-      <div>
-        <div class="text-muted small mb-1">Раздел</div>
-        <h1 class="h4 mb-0">Задачи</h1>
-      </div>
-
+    <div class="d-flex flex-column flex-lg-row justify-content-lg-end align-items-lg-center gap-3 mb-3">
       <div class="d-flex gap-2 flex-wrap">
         <button class="btn btn-outline-secondary" @click="resetFilters">
           Сбросить

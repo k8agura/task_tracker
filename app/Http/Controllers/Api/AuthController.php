@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -24,6 +26,8 @@ class AuthController extends Controller
                 'email' => ['Неверный email или пароль.'],
             ]);
         }
+
+        RateLimiter::clear($this->loginThrottleKey($request));
 
         $token = $user->createToken('api-token')->plainTextToken;
 
@@ -46,5 +50,10 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Выход выполнен',
         ]);
+    }
+
+    private function loginThrottleKey(Request $request): string
+    {
+        return Str::lower((string) $request->input('email')).'|'.$request->ip();
     }
 }

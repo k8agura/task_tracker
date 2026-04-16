@@ -5,6 +5,9 @@ import { createApp, h } from 'vue';
 import { RouterView } from 'vue-router';
 import router from './router';
 import './styles/theme.css';
+import { initializeTheme } from './services/theme';
+
+initializeTheme();
 
 const app = createApp({
     render: () => h(RouterView),

@@ -1,12 +1,5 @@
 <template>
   <AppLayout>
-    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
-      <div>
-        <div class="text-muted small mb-1">Раздел</div>
-        <h1 class="h4 mb-0">Мой профиль</h1>
-      </div>
-    </div>
-
     <div v-if="loading" class="text-center py-4 text-muted">
       Загрузка профиля...
     </div>

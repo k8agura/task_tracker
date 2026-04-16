@@ -1,14 +1,14 @@
 <template>
   <div class="chat-card card-soft d-flex flex-column h-100">
     <div class="chat-header d-flex justify-content-between align-items-center px-3 py-2 border-bottom">
-    <div class="d-flex flex-column">
+      <div class="d-flex flex-column">
         <span class="chat-title">Чат</span>
         <span class="chat-subtitle">Онлайн-обсуждение</span>
-    </div>
+      </div>
 
-    <button class="btn btn-sm btn-outline-secondary chat-refresh-btn" @click="loadMessages">
+      <button class="btn btn-sm btn-outline-secondary chat-refresh-btn" @click="loadMessages">
         ↻
-    </button>
+      </button>
     </div>
 
     <div
@@ -53,9 +53,9 @@
                 class="mb-1"
               >
                 <a
+                  href="#"
                   class="message-link"
-                  :href="`/api/attachments/${attachment.id}/download`"
-                  target="_blank"
+                  @click.prevent="downloadAttachment(attachment)"
                 >
                   {{ attachment.original_name }}
                 </a>
@@ -192,31 +192,57 @@ const sendMessage = async () => {
   }
 };
 
+const downloadAttachment = async (attachment) => {
+  try {
+    const response = await window.axios.get(`/api/attachments/${attachment.id}/download`, {
+      responseType: 'blob',
+    });
+
+    const blobUrl = window.URL.createObjectURL(response.data);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = attachment.original_name || `attachment-${attachment.id}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(blobUrl);
+  } catch (error) {
+    errorMessage.value = 'Не удалось скачать файл';
+  }
+};
+
 onMounted(async () => {
   await loadCurrentUser();
   await loadMessages();
 
-  window.Echo.private(`task.${props.taskId}`)
-    .listen('.chat.message.sent', async (event) => {
-      const exists = messages.value.some((item) => item.id === event.id);
-      if (!exists) {
-        messages.value.push(event);
-        await scrollToBottom();
-      }
-    });
+  if (window.Echo) {
+    window.Echo.private(`task.${props.taskId}`)
+      .listen('.chat.message.sent', async (event) => {
+        const exists = messages.value.some((item) => item.id === event.id);
+        if (!exists) {
+          messages.value.push(event);
+          await scrollToBottom();
+        }
+      });
+  }
 });
 
 onBeforeUnmount(() => {
-  window.Echo.leave(`private-task.${props.taskId}`);
+  if (window.Echo) {
+    window.Echo.leave(`private-task.${props.taskId}`);
+  }
 });
 </script>
 
 <style scoped>
 .chat-card {
-  height: 520px;
-  min-height: 520px;
-  max-height: 520px;
-  background: #ffffff;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  background: var(--surface-2);
   border-radius: 22px;
   overflow: hidden;
   display: flex;
@@ -224,7 +250,7 @@ onBeforeUnmount(() => {
 }
 
 .chat-header {
-  background: linear-gradient(180deg, #f9ffff 0%, #f4fbff 100%);
+  background: linear-gradient(180deg, var(--surface-2) 0%, var(--surface-1) 100%);
   flex: 0 0 auto;
   min-height: 54px;
 }
@@ -233,13 +259,13 @@ onBeforeUnmount(() => {
   font-size: 0.98rem;
   font-weight: 700;
   line-height: 1.1;
-  color: #23414b;
+  color: var(--text-1);
 }
 
 .chat-subtitle {
   font-size: 0.72rem;
   line-height: 1.1;
-  color: #6b8b95;
+  color: var(--text-muted);
   margin-top: 2px;
 }
 
@@ -260,14 +286,15 @@ onBeforeUnmount(() => {
   overflow-y: auto;
   overflow-x: hidden;
   background:
-    radial-gradient(circle at top left, rgba(104, 199, 183, 0.06), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(107, 150, 255, 0.07), transparent 30%),
-    #f7fcfb;
+    radial-gradient(circle at top left, rgba(104, 199, 183, 0.08), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(107, 150, 255, 0.09), transparent 30%),
+    var(--surface-1);
 }
 
 .chat-footer {
   flex: 0 0 auto;
-  background: #ffffff;
+  background: var(--surface-2);
+  border-color: var(--border-soft) !important;
 }
 
 .chat-input {
@@ -279,7 +306,7 @@ onBeforeUnmount(() => {
   max-width: min(78%, 560px);
   border-radius: 18px;
   padding: 12px 14px 10px;
-  box-shadow: 0 8px 20px rgba(90, 130, 140, 0.08);
+  box-shadow: var(--shadow-soft);
 }
 
 .message-own {
@@ -289,9 +316,9 @@ onBeforeUnmount(() => {
 }
 
 .message-other {
-  background: white;
-  color: #243943;
-  border: 1px solid rgba(110, 150, 160, 0.12);
+  background: var(--surface-2);
+  color: var(--text-1);
+  border: 1px solid var(--border-soft);
   border-bottom-left-radius: 6px;
 }
 
@@ -299,7 +326,7 @@ onBeforeUnmount(() => {
   font-weight: 700;
   font-size: 0.92rem;
   margin-bottom: 6px;
-  color: #2d5a63;
+  color: var(--text-2);
 }
 
 .message-text {
@@ -320,17 +347,17 @@ onBeforeUnmount(() => {
 
 @media (max-width: 1199px) {
   .chat-card {
-    height: 440px;
-    min-height: 440px;
-    max-height: 440px;
+    height: 500px;
+    min-height: 500px;
+    max-height: 500px;
   }
 }
 
 @media (max-width: 992px) {
   .chat-card {
-    height: 420px;
-    min-height: 420px;
-    max-height: 420px;
+    height: 440px;
+    min-height: 440px;
+    max-height: 440px;
   }
 
   .message-bubble {
