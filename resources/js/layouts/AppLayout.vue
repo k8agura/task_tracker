@@ -1,6 +1,12 @@
 <template>
   <div class="app-shell">
-    <aside class="sidebar d-flex flex-column">
+    <div
+      v-if="isMobileNavOpen"
+      class="sidebar-overlay"
+      @click="closeMobileNav"
+    ></div>
+
+    <aside class="sidebar d-flex flex-column" :class="{ 'sidebar-open': isMobileNavOpen }">
       <div class="sidebar-brand">
         <div class="brand-mark">
           <span class="brand-mark-core">T</span>
@@ -8,7 +14,7 @@
         <div class="brand-copy">
           <div class="brand-kicker">Рабочее пространство</div>
           <div class="brand-title">Task Tracker</div>
-          <div class="brand-subtitle">Задачи, обсуждение и отчёты в одном потоке</div>
+          <div class="brand-subtitle">Задачи, обсуждение и отчеты в одном потоке</div>
         </div>
       </div>
 
@@ -29,7 +35,7 @@
         </RouterLink>
 
         <RouterLink to="/reports" class="sidebar-link">
-          <span class="sidebar-link-label">Отчёты</span>
+          <span class="sidebar-link-label">Отчеты</span>
           <span class="sidebar-link-note">Нагрузка и сводки</span>
         </RouterLink>
       </nav>
@@ -45,7 +51,7 @@
 
         <div class="sidebar-actions">
           <button class="theme-toggle" type="button" @click="toggleTheme">
-            <span>{{ isDark ? 'Светлая тема' : 'Тёмная тема' }}</span>
+            <span>{{ isDark ? 'Светлая тема' : 'Темная тема' }}</span>
             <span class="theme-toggle-state">{{ isDark ? 'Вкл' : 'Выкл' }}</span>
           </button>
 
@@ -58,14 +64,22 @@
 
     <div class="content-wrapper">
       <header class="topbar">
-        <div>
-          <div class="topbar-eyebrow">{{ routeMeta.eyebrow }}</div>
-          <div class="topbar-title">{{ routeMeta.title }}</div>
+        <div class="topbar-title-group">
+          <button class="mobile-nav-toggle" type="button" @click="toggleMobileNav">
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
+
+          <div class="topbar-copy">
+            <div class="topbar-eyebrow">{{ routeMeta.eyebrow }}</div>
+            <div class="topbar-title">{{ routeMeta.title }}</div>
+          </div>
         </div>
 
         <div class="topbar-actions">
           <button class="topbar-theme-button" type="button" @click="toggleTheme">
-            {{ isDark ? 'Светлая' : 'Тёмная' }}
+            {{ isDark ? 'Светлая' : 'Темная' }}
           </button>
           <div class="topbar-user">{{ userName }}</div>
         </div>
@@ -79,7 +93,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { clearToken } from '../services/auth';
 import { clearCurrentUser, loadCurrentUser, useAuthState } from '../services/authState';
@@ -89,6 +103,7 @@ const router = useRouter();
 const route = useRoute();
 const { isAdmin, userLoaded, currentUser } = useAuthState();
 const { isDark, toggleTheme } = useTheme();
+const isMobileNavOpen = ref(false);
 
 const routeMeta = computed(() => {
   const map = {
@@ -97,7 +112,7 @@ const routeMeta = computed(() => {
     'task-details': { eyebrow: 'Задача', title: 'Карточка задачи' },
     profile: { eyebrow: 'Профиль', title: 'Профиль и настройки' },
     users: { eyebrow: 'Администрирование', title: 'Управление командой' },
-    reports: { eyebrow: 'Отчёты', title: 'Отчёты и аналитика' },
+    reports: { eyebrow: 'Отчеты', title: 'Отчеты и аналитика' },
   };
 
   return map[route.name] || { eyebrow: 'Рабочее пространство', title: 'Task Tracker' };
@@ -118,6 +133,14 @@ const userInitials = computed(() => {
   return parts.map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'U';
 });
 
+const closeMobileNav = () => {
+  isMobileNavOpen.value = false;
+};
+
+const toggleMobileNav = () => {
+  isMobileNavOpen.value = !isMobileNavOpen.value;
+};
+
 const logout = async () => {
   try {
     await window.axios.post('/api/logout');
@@ -128,8 +151,16 @@ const logout = async () => {
   clearToken();
   clearCurrentUser();
   delete window.axios.defaults.headers.common.Authorization;
+  closeMobileNav();
   router.push('/login');
 };
+
+watch(
+  () => route.fullPath,
+  () => {
+    closeMobileNav();
+  }
+);
 
 onMounted(async () => {
   if (!userLoaded.value) {
@@ -151,11 +182,22 @@ onMounted(async () => {
   overflow: hidden;
 }
 
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 15, 24, 0.42);
+  backdrop-filter: blur(6px);
+  z-index: 40;
+}
+
 .sidebar {
   padding: 22px 18px 18px;
   background: var(--sidebar-bg);
   border-right: 1px solid var(--border-soft);
   backdrop-filter: blur(20px);
+  min-height: 0;
+  overflow-y: auto;
+  z-index: 50;
 }
 
 .sidebar-brand {
@@ -338,7 +380,19 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 18px 28px 10px;
+  padding: 18px 28px 12px;
+  min-width: 0;
+}
+
+.topbar-title-group {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.topbar-copy {
+  min-width: 0;
 }
 
 .topbar-eyebrow {
@@ -355,6 +409,29 @@ onMounted(async () => {
   font-weight: 800;
 }
 
+.mobile-nav-toggle {
+  display: none;
+  width: 46px;
+  height: 46px;
+  border: 1px solid var(--border-soft);
+  border-radius: 16px;
+  background: var(--surface-1);
+  color: var(--text-1);
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 4px;
+  flex: 0 0 auto;
+  box-shadow: var(--shadow-soft);
+}
+
+.mobile-nav-toggle span {
+  width: 18px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
 .topbar-actions {
   display: flex;
   align-items: center;
@@ -369,6 +446,10 @@ onMounted(async () => {
   border: 1px solid var(--border-soft);
   color: var(--text-1);
   font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 .content-area {
@@ -376,18 +457,33 @@ onMounted(async () => {
   padding: 0 28px 28px;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto;
 }
 
 @media (max-width: 1100px) {
   .app-shell {
     grid-template-columns: 1fr;
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
   }
 
   .sidebar {
-    padding-bottom: 12px;
-    border-right: none;
-    border-bottom: 1px solid var(--border-soft);
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(86vw, 360px);
+    max-width: 360px;
+    border-right: 1px solid var(--border-soft);
+    border-bottom: none;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    box-shadow: 0 24px 60px rgba(4, 12, 20, 0.2);
+  }
+
+  .sidebar.sidebar-open {
+    transform: translateX(0);
   }
 
   .sidebar-nav {
@@ -395,16 +491,30 @@ onMounted(async () => {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .content-area {
-    padding: 0 18px 18px;
+  .mobile-nav-toggle {
+    display: inline-flex;
   }
 
   .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
     padding: 14px 18px 10px;
+    backdrop-filter: blur(18px);
+    background: var(--topbar-mobile-bg);
+  }
+
+  .content-area {
+    padding: 0 18px 18px;
   }
 }
 
 @media (max-width: 768px) {
+  .sidebar {
+    width: min(92vw, 340px);
+    padding: 18px 14px 16px;
+  }
+
   .sidebar-nav {
     grid-template-columns: 1fr;
   }
@@ -412,16 +522,47 @@ onMounted(async () => {
   .topbar {
     flex-direction: column;
     align-items: flex-start;
+    padding: 14px 16px 10px;
+  }
+
+  .topbar-title-group {
+    width: 100%;
   }
 
   .topbar-actions {
     width: 100%;
+    flex-wrap: wrap;
   }
 
   .topbar-theme-button,
   .topbar-user {
-    flex: 1;
+    flex: 1 1 180px;
     text-align: center;
+  }
+
+  .topbar-title {
+    font-size: 1.15rem;
+  }
+
+  .content-area {
+    padding: 0 16px 16px;
+  }
+}
+
+@media (max-width: 560px) {
+  .topbar-actions {
+    gap: 8px;
+  }
+
+  .topbar-theme-button,
+  .topbar-user {
+    width: 100%;
+  }
+
+  .brand-subtitle,
+  .sidebar-link-note,
+  .profile-role {
+    font-size: 0.78rem;
   }
 }
 </style>

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\UpdateProfileRequest;
+use App\Models\User;
 use Illuminate\Http\Request;
 
 class ProfileController extends Controller
@@ -12,6 +13,26 @@ class ProfileController extends Controller
     {
         return response()->json(
             $request->user()->load(['department', 'roles'])
+        );
+    }
+
+    public function showUser(Request $request, User $user)
+    {
+        $viewer = $request->user();
+
+        if (
+            !$viewer->hasRole('admin') &&
+            $viewer->id !== $user->id &&
+            $viewer->department_id &&
+            $viewer->department_id !== $user->department_id
+        ) {
+            return response()->json([
+                'message' => 'Просмотр профиля этого сотрудника недоступен',
+            ], 403);
+        }
+
+        return response()->json(
+            $user->load(['department', 'roles'])
         );
     }
 

@@ -94,7 +94,7 @@
           </button>
         </div>
 
-        <div class="form-text mt-2">
+        <div class="form-text chat-hint mt-2">
           Enter — отправить, Shift+Enter — новая строка
         </div>
       </form>
@@ -104,6 +104,8 @@
 
 <script setup>
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { fetchCurrentUser } from '../api/me';
+import { fetchTaskMessages, sendTaskMessage } from '../api/tasks';
 
 const props = defineProps({
   taskId: {
@@ -152,8 +154,7 @@ const scrollToBottom = async () => {
 };
 
 const loadCurrentUser = async () => {
-  const response = await window.axios.get('/api/me');
-  currentUser.value = response.data;
+  currentUser.value = await fetchCurrentUser();
 };
 
 const loadMessages = async () => {
@@ -161,8 +162,7 @@ const loadMessages = async () => {
   errorMessage.value = '';
 
   try {
-    const response = await window.axios.get(`/api/tasks/${props.taskId}/messages`);
-    messages.value = response.data;
+    messages.value = await fetchTaskMessages(props.taskId);
     await scrollToBottom();
   } catch (error) {
     errorMessage.value = 'Не удалось загрузить сообщения';
@@ -178,11 +178,11 @@ const sendMessage = async () => {
   errorMessage.value = '';
 
   try {
-    const response = await window.axios.post(`/api/tasks/${props.taskId}/messages`, {
+    const response = await sendTaskMessage(props.taskId, {
       message: newMessage.value,
     });
 
-    messages.value.push(response.data);
+    messages.value.push(response);
     newMessage.value = '';
     await scrollToBottom();
   } catch (error) {
@@ -239,9 +239,9 @@ onBeforeUnmount(() => {
   flex: 1 1 auto;
   width: 100%;
   max-width: 100%;
-  height: 100%;
-  min-height: 0;
-  max-height: 100%;
+  height: min(820px, calc(100dvh - 220px));
+  min-height: clamp(460px, 62dvh, 620px);
+  max-height: calc(100dvh - 220px);
   background: var(--surface-2);
   border-radius: 22px;
   overflow: hidden;
@@ -295,11 +295,20 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   background: var(--surface-2);
   border-color: var(--border-soft) !important;
+  overflow: visible;
 }
 
 .chat-input {
   resize: none;
   border-radius: 14px 0 0 14px;
+}
+
+.chat-hint {
+  display: block;
+  color: var(--text-muted) !important;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  opacity: 1;
 }
 
 .message-bubble {
@@ -347,21 +356,30 @@ onBeforeUnmount(() => {
 
 @media (max-width: 1199px) {
   .chat-card {
-    height: 500px;
-    min-height: 500px;
-    max-height: 500px;
+    height: min(720px, calc(100dvh - 240px));
+    min-height: clamp(440px, 58dvh, 560px);
+    max-height: calc(100dvh - 240px);
   }
 }
 
 @media (max-width: 992px) {
   .chat-card {
-    height: 440px;
-    min-height: 440px;
-    max-height: 440px;
+    height: min(680px, calc(100dvh - 260px));
+    min-height: clamp(420px, 56dvh, 520px);
+    max-height: calc(100dvh - 260px);
   }
 
   .message-bubble {
     max-width: 88%;
+  }
+}
+
+@media (max-width: 640px) {
+  .chat-card {
+    height: min(620px, calc(100dvh - 230px));
+    min-height: clamp(400px, 54dvh, 500px);
+    max-height: calc(100dvh - 230px);
+    border-radius: 18px;
   }
 }
 </style>

@@ -1,11 +1,11 @@
 <template>
   <AppLayout>
-    <div class="d-flex flex-column flex-lg-row justify-content-lg-end align-items-lg-center gap-3 mb-3">
-      <div class="d-flex gap-2 flex-wrap">
+    <div class="page-actions d-flex flex-column flex-lg-row justify-content-lg-end align-items-lg-center gap-3 mb-3">
+      <div class="d-flex gap-2 flex-wrap page-actions-group">
         <button class="btn btn-outline-secondary" @click="resetFilters">
           Сбросить
         </button>
-        <button class="btn btn-outline-secondary" @click="loadTasks">
+        <button class="btn btn-outline-secondary" @click="loadTasks()">
           Обновить
         </button>
         <button class="btn btn-theme" data-bs-toggle="modal" data-bs-target="#createTaskModal">
@@ -98,14 +98,11 @@
               class="task-row"
               @click="openTask(task.id)"
             >
-              <td class="fw-semibold">#{{ task.id }}</td>
-              <td>
+              <td class="fw-semibold" data-label="ID">#{{ task.id }}</td>
+              <td data-label="Название">
                 <div class="d-flex align-items-center gap-2 flex-wrap">
                   <span class="fw-semibold">{{ task.title }}</span>
-                  <span
-                    v-if="isOverdue(task)"
-                    class="badge text-bg-danger"
-                  >
+                  <span v-if="isOverdue(task)" class="badge text-bg-danger">
                     Просрочено
                   </span>
                 </div>
@@ -114,28 +111,22 @@
                   {{ task.description || 'Без описания' }}
                 </div>
               </td>
-              <td>
+              <td data-label="Статус">
                 <span class="badge text-bg-primary">
                   {{ task.status?.name || '—' }}
                 </span>
               </td>
-              <td>
+              <td data-label="Приоритет">
                 <span class="badge" :class="priorityClass(task.priority)">
                   {{ priorityLabel(task.priority) }}
                 </span>
               </td>
-              <td>
-                <span
-                  v-if="isDueToday(task)"
-                  class="badge due-today-badge"
-                >
-                  🔥 {{ formatShortDate(task.due_date) }}
+              <td data-label="Срок">
+                <span v-if="isDueToday(task)" class="badge due-today-badge">
+                  Сегодня · {{ formatShortDate(task.due_date) }}
                 </span>
 
-                <span
-                  v-else-if="isOverdue(task)"
-                  class="badge text-bg-danger"
-                >
+                <span v-else-if="isOverdue(task)" class="badge text-bg-danger">
                   Просрочено · {{ formatShortDate(task.due_date) }}
                 </span>
 
@@ -153,7 +144,7 @@
         class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mt-3 px-2"
       >
         <div class="small text-muted">
-          Показано {{ pagination.from }}–{{ pagination.to }} из {{ pagination.total }}
+          Показано {{ pagination.from }}-{{ pagination.to }} из {{ pagination.total }}
         </div>
 
         <div class="d-flex gap-2 flex-wrap">
@@ -186,124 +177,16 @@
       </div>
     </div>
 
-    <div class="modal fade" id="createTaskModal" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content border-0 rounded-4">
-          <div class="modal-header border-0 pb-0">
-            <div>
-              <h5 class="modal-title">Создать задачу</h5>
-              <div class="text-muted small">Заполните основные параметры задачи</div>
-            </div>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
-          </div>
-
-          <div class="modal-body pt-3">
-            <div v-if="createError" class="alert alert-danger py-2">
-              {{ createError }}
-            </div>
-
-            <div class="row g-3">
-              <div class="col-12">
-                <label class="form-label">Название</label>
-                <input v-model="createForm.title" type="text" class="form-control" />
-              </div>
-
-              <div class="col-12">
-                <label class="form-label">Описание</label>
-                <textarea v-model="createForm.description" rows="4" class="form-control"></textarea>
-              </div>
-
-              <div class="col-md-4">
-                <label class="form-label">Приоритет</label>
-                <select v-model="createForm.priority" class="form-select">
-                  <option value="low">Низкий</option>
-                  <option value="medium">Средний</option>
-                  <option value="high">Высокий</option>
-                  <option value="critical">Критический</option>
-                </select>
-              </div>
-
-              <div class="col-md-4">
-                <label class="form-label">Статус</label>
-                <select v-model="createForm.status_id" class="form-select">
-                  <option value="">Выберите статус</option>
-                  <option v-for="status in statuses" :key="status.id" :value="status.id">
-                    {{ status.name }}
-                  </option>
-                </select>
-              </div>
-
-              <div class="col-md-4">
-                <label class="form-label">Срок</label>
-                <input v-model="createForm.due_date" type="date" class="form-control" />
-              </div>
-            </div>
-
-            <div class="mt-4">
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <label class="form-label mb-0">Исполнители</label>
-                <button
-                  type="button"
-                  class="btn btn-sm btn-outline-primary"
-                  @click="addCreatePerformer"
-                >
-                  Добавить
-                </button>
-              </div>
-
-              <div v-if="createForm.performers.length === 0" class="text-muted small">
-                Исполнители не выбраны
-              </div>
-
-              <div
-                v-for="(performer, index) in createForm.performers"
-                :key="`${performer.user_id}-${index}`"
-                class="row g-2 align-items-center mb-2"
-              >
-                <div class="col-md-7">
-                  <select v-model="performer.user_id" class="form-select">
-                    <option
-                      v-for="user in users"
-                      :key="user.id"
-                      :value="user.id"
-                    >
-                      {{ fullName(user) }}
-                    </option>
-                  </select>
-                </div>
-
-                <div class="col-md-3">
-                  <select v-model="performer.role" class="form-select">
-                    <option value="executor">Исполнитель</option>
-                    <option value="observer">Наблюдатель</option>
-                    <option value="reviewer">Проверяющий</option>
-                  </select>
-                </div>
-
-                <div class="col-md-2">
-                  <button
-                    type="button"
-                    class="btn btn-outline-danger w-100"
-                    @click="removeCreatePerformer(index)"
-                  >
-                    Убрать
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="modal-footer border-0 pt-0">
-            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
-              Отмена
-            </button>
-            <button type="button" class="btn btn-theme" :disabled="creating" @click="createTask">
-              {{ creating ? 'Создание...' : 'Создать задачу' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <TaskCreateModal
+      :form="createForm"
+      :statuses="statuses"
+      :users="users"
+      :creating="creating"
+      :create-error="createError"
+      @add-performer="addCreatePerformer"
+      @remove-performer="removeCreatePerformer"
+      @submit="createTask"
+    />
   </AppLayout>
 </template>
 
@@ -312,6 +195,11 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Modal } from 'bootstrap';
 import AppLayout from '../layouts/AppLayout.vue';
+import TaskCreateModal from '../components/tasks/TaskCreateModal.vue';
+import { fetchTaskStatuses } from '../api/lookups';
+import { fetchTasks, createTaskRequest } from '../api/tasks';
+import { fetchUsers } from '../api/users';
+import { useTaskPresentation } from '../composables/useTaskPresentation';
 
 const router = useRouter();
 
@@ -325,15 +213,7 @@ const users = ref([]);
 const searchDebounce = ref(null);
 let createTaskModalInstance = null;
 
-const formatShortDate = (value) => {
-  if (!value) return '';
-
-  return new Date(value).toLocaleDateString('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-};
+const { formatShortDate, isDueToday, isOverdue, priorityClass, priorityLabel } = useTaskPresentation();
 
 const pagination = reactive({
   current_page: 1,
@@ -365,21 +245,15 @@ const visiblePages = computed(() => {
   const start = Math.max(1, pagination.current_page - 2);
   const end = Math.min(pagination.last_page, pagination.current_page + 2);
 
-  for (let i = start; i <= end; i++) {
-    pages.push(i);
+  for (let index = start; index <= end; index += 1) {
+    pages.push(index);
   }
 
   return pages;
 });
 
-const fullName = (user) => {
-  if (!user) return '';
-  return [user.last_name, user.first_name, user.middle_name].filter(Boolean).join(' ');
-};
-
 const loadStatuses = async () => {
-  const response = await window.axios.get('/api/task-statuses');
-  statuses.value = response.data;
+  statuses.value = await fetchTaskStatuses();
 
   if (!createForm.status_id && statuses.value.length) {
     createForm.status_id = statuses.value[0].id;
@@ -388,8 +262,8 @@ const loadStatuses = async () => {
 
 const loadUsers = async () => {
   try {
-    const response = await window.axios.get('/api/users');
-    users.value = response.data.data || response.data || [];
+    const response = await fetchUsers();
+    users.value = response.data || response || [];
   } catch (error) {
     users.value = [];
   }
@@ -409,11 +283,9 @@ const loadTasks = async (page = 1) => {
     if (filters.status_id) params.status_id = filters.status_id;
     if (filters.priority) params.priority = filters.priority;
 
-    const response = await window.axios.get('/api/tasks', { params });
-    const payload = response.data;
+    const payload = await fetchTasks(params);
 
     tasks.value = payload.data || [];
-
     pagination.current_page = payload.current_page || 1;
     pagination.last_page = payload.last_page || 1;
     pagination.per_page = payload.per_page || 15;
@@ -456,54 +328,6 @@ const openTask = (id) => {
   router.push(`/tasks/${id}`);
 };
 
-const priorityLabel = (priority) => {
-  const map = {
-    low: 'Низкий',
-    medium: 'Средний',
-    high: 'Высокий',
-    critical: 'Критический',
-  };
-
-  return map[priority] || priority;
-};
-
-const priorityClass = (priority) => {
-  const map = {
-    low: 'text-bg-secondary',
-    medium: 'text-bg-info',
-    high: 'text-bg-warning',
-    critical: 'text-bg-danger',
-  };
-
-  return map[priority] || 'text-bg-secondary';
-};
-
-const isOverdue = (task) => {
-  if (!task?.due_date) return false;
-  if (task?.status?.code === 'done') return false;
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const dueDate = new Date(task.due_date);
-  dueDate.setHours(0, 0, 0, 0);
-
-  return dueDate < today;
-};
-
-const isDueToday = (task) => {
-  if (!task?.due_date) return false;
-  if (task?.status?.code === 'done') return false;
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const dueDate = new Date(task.due_date);
-  dueDate.setHours(0, 0, 0, 0);
-
-  return dueDate.getTime() === today.getTime();
-};
-
 const resetCreateForm = () => {
   createForm.title = '';
   createForm.description = '';
@@ -517,8 +341,8 @@ const resetCreateForm = () => {
 const addCreatePerformer = () => {
   if (!users.value.length) return;
 
-  const selectedIds = createForm.performers.map(item => item.user_id);
-  const firstAvailable = users.value.find(user => !selectedIds.includes(user.id));
+  const selectedIds = createForm.performers.map((item) => item.user_id);
+  const firstAvailable = users.value.find((user) => !selectedIds.includes(user.id));
 
   if (!firstAvailable) return;
 
@@ -537,7 +361,7 @@ const createTask = async () => {
   createError.value = '';
 
   try {
-    await window.axios.post('/api/tasks', {
+    await createTaskRequest({
       title: createForm.title,
       description: createForm.description,
       priority: createForm.priority,
@@ -548,10 +372,7 @@ const createTask = async () => {
 
     await loadTasks(1);
     resetCreateForm();
-
-    if (createTaskModalInstance) {
-      createTaskModalInstance.hide();
-    }
+    createTaskModalInstance?.hide();
   } catch (error) {
     createError.value =
       error?.response?.data?.message ||
@@ -567,17 +388,18 @@ onMounted(async () => {
   await loadTasks(1);
 
   const modalEl = document.getElementById('createTaskModal');
-  if (modalEl) {
-    createTaskModalInstance = new Modal(modalEl);
+  if (!modalEl) return;
 
-    modalEl.addEventListener('hidden.bs.modal', () => {
-      resetCreateForm();
-    });
-  }
+  createTaskModalInstance = new Modal(modalEl);
+  modalEl.addEventListener('hidden.bs.modal', resetCreateForm);
 });
 </script>
 
 <style scoped>
+.page-actions-group > .btn {
+  min-width: 140px;
+}
+
 .task-table th {
   font-size: 0.9rem;
   color: #5b7b84;
@@ -622,5 +444,74 @@ onMounted(async () => {
   background: #8f000e;
   color: #fff;
   font-weight: 700;
+}
+
+@media (max-width: 768px) {
+  .page-actions-group {
+    width: 100%;
+  }
+
+  .page-actions-group > .btn {
+    flex: 1 1 calc(50% - 0.5rem);
+    min-width: 0;
+  }
+
+  .text-truncate-cell {
+    max-width: none;
+    white-space: normal;
+  }
+}
+
+@media (max-width: 640px) {
+  .task-table thead {
+    display: none;
+  }
+
+  .task-table,
+  .task-table tbody,
+  .task-table tr,
+  .task-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .task-row {
+    display: grid;
+    gap: 0.4rem;
+    padding: 0.85rem 0.95rem;
+    border: 1px solid var(--border-soft);
+    border-radius: 18px;
+    background: var(--surface-1);
+    margin-bottom: 0.75rem;
+    box-shadow: var(--shadow-soft);
+  }
+
+  .task-row td {
+    padding: 0;
+    border: none;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .task-row td::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    flex: 0 0 6.5rem;
+  }
+
+  .task-row:hover td {
+    background-color: transparent !important;
+  }
+
+  .task-row:hover td:first-child,
+  .task-row:hover td:last-child {
+    border-radius: 0;
+  }
 }
 </style>

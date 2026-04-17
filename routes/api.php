@@ -17,6 +17,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
+    Route::get('/dashboard/tasks', [TaskController::class, 'board']);
     Route::apiResource('departments', DepartmentController::class);
     Route::apiResource('users', UserController::class);
     Route::apiResource('tasks', TaskController::class);
@@ -37,6 +38,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/attachments/{attachment}', [AttachmentController::class, 'destroy']);
 
     Route::get('/profile', [ProfileController::class, 'show']);
+    Route::get('/profiles/{user}', [ProfileController::class, 'showUser']);
     Route::put('/profile', [ProfileController::class, 'update']);
 
     Route::apiResource('reports', ReportController::class)->only(['index', 'store', 'show', 'destroy']);

@@ -6,7 +6,7 @@
           Обновить
         </button>
         <button class="btn btn-theme" @click="createReport">
-          Сформировать отчёт
+          Сформировать отчет
         </button>
       </div>
     </div>
@@ -14,8 +14,8 @@
     <div class="card-soft bg-white p-3 p-md-4 mb-3">
       <div class="row g-3">
         <div class="col-12 col-md-4">
-          <label class="form-label">Название отчёта</label>
-          <input v-model="form.name" type="text" class="form-control" placeholder="Например: Отчёт за март" />
+          <label class="form-label">Название отчета</label>
+          <input v-model="form.name" type="text" class="form-control" placeholder="Например: Отчет за март" />
         </div>
 
         <div class="col-12 col-md-2">
@@ -56,11 +56,11 @@
 
     <div class="card-soft bg-white p-2 p-md-3">
       <div v-if="loading" class="text-center py-4 text-muted">
-        Загрузка отчётов...
+        Загрузка отчетов...
       </div>
 
       <div v-else-if="reports.length === 0" class="text-center py-4 text-muted">
-        Отчёты не найдены
+        Отчеты не найдены
       </div>
 
       <div v-else class="table-responsive">
@@ -81,9 +81,9 @@
               @click="openReport(report)"
             >
               <td class="fw-semibold">{{ report.name }}</td>
-              <td>{{ formatPeriod(report) }}</td>
+              <td>{{ formatReportPeriod(report) }}</td>
               <td>{{ report.creator?.last_name || '—' }} {{ report.creator?.first_name || '' }}</td>
-              <td>{{ formatDate(report.created_at) }}</td>
+              <td>{{ formatReportDateTime(report.created_at) }}</td>
             </tr>
           </tbody>
         </table>
@@ -121,7 +121,7 @@
             :disabled="pagination.current_page >= pagination.last_page"
             @click="goToPage(pagination.current_page + 1)"
           >
-            Вперёд
+            Вперед
           </button>
         </div>
       </div>
@@ -132,9 +132,9 @@
         <div class="modal-content border-0 rounded-4">
           <div class="modal-header border-0 pb-0">
             <div>
-              <h5 class="modal-title">{{ selectedReport?.name || 'Отчёт' }}</h5>
+              <h5 class="modal-title">{{ selectedReport?.name || 'Отчет' }}</h5>
               <div class="text-muted small">
-                {{ selectedReport ? formatPeriod(selectedReport) : '' }}
+                {{ selectedReport ? formatReportPeriod(selectedReport) : '' }}
               </div>
             </div>
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -191,7 +191,7 @@
                   </div>
                 </div>
               </div>
-              
+
               <div v-if="reportTab === 'info'" class="row g-3">
                 <div class="col-12 col-md-6 col-xl-3">
                   <div class="card-soft bg-white p-3 border">
@@ -294,7 +294,7 @@
                             <td class="fw-semibold">#{{ item.task_id }}</td>
                             <td>{{ item.title }}</td>
                             <td>{{ item.closed_by }}</td>
-                            <td>{{ formatDate(item.completed_at) }}</td>
+                            <td>{{ formatReportDateTime(item.completed_at) }}</td>
                             <td>{{ item.completion_days ?? '—' }} дн.</td>
                           </tr>
                         </tbody>
@@ -314,7 +314,7 @@
               :disabled="deleting"
               @click="deleteReport"
             >
-              {{ deleting ? 'Удаление...' : 'Удалить отчёт' }}
+              {{ deleting ? 'Удаление...' : 'Удалить отчет' }}
             </button>
 
             <button type="button" class="btn btn-outline-secondary ms-auto" data-bs-dismiss="modal">
@@ -330,39 +330,12 @@
 <script setup>
 import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { Modal } from 'bootstrap';
-import { Chart, BarController, BarElement, CategoryScale, DoughnutController, ArcElement, Tooltip, Legend, LinearScale } from 'chart.js';
 import AppLayout from '../layouts/AppLayout.vue';
-
-const chartPalette = [
-  '#5DB7A7',
-  '#6A90F0',
-  '#F4B942',
-  '#E85D75',
-  '#8A6DF1',
-  '#4CC9F0',
-  '#43AA8B',
-  '#F3722C',
-  '#577590',
-  '#90BE6D',
-];
-
-const priorityColors = {
-  low: '#6c757d',
-  medium: '#0dcaf0',
-  high: '#ffc107',
-  critical: '#dc3545',
-};
-
-Chart.register(
-  BarController,
-  BarElement,
-  CategoryScale,
-  DoughnutController,
-  ArcElement,
-  Tooltip,
-  Legend,
-  LinearScale
-);
+import { fetchDepartments, fetchTaskStatuses } from '../api/lookups';
+import { createReportRequest, deleteReportRequest, fetchReport, fetchReports } from '../api/reports';
+import { renderReportCharts, destroyReportCharts } from '../features/reports/charting';
+import { ensureCurrentUserLoaded } from '../services/authState';
+import { formatDateTime, formatPeriod } from '../utils/formatters';
 
 const reports = ref([]);
 const departments = ref([]);
@@ -380,9 +353,11 @@ const priorityChartRef = ref(null);
 const closersChartRef = ref(null);
 
 let reportModalInstance = null;
-let statusChart = null;
-let priorityChart = null;
-let closersChart = null;
+const chartInstances = reactive({
+  status: null,
+  priority: null,
+  closers: null,
+});
 
 const pagination = reactive({
   current_page: 1,
@@ -393,7 +368,7 @@ const pagination = reactive({
 });
 
 const form = reactive({
-  name: 'Отчёт по задачам',
+  name: 'Отчет по задачам',
   date_from: '',
   date_to: '',
   department_id: '',
@@ -405,7 +380,7 @@ const visiblePages = computed(() => {
   const start = Math.max(1, pagination.current_page - 2);
   const end = Math.min(pagination.last_page, pagination.current_page + 2);
 
-  for (let i = start; i <= end; i++) {
+  for (let i = start; i <= end; i += 1) {
     pages.push(i);
   }
 
@@ -414,13 +389,15 @@ const visiblePages = computed(() => {
 
 const canDeleteReports = computed(() => {
   return Array.isArray(currentUser.value?.roles) &&
-    currentUser.value.roles.some(role => ['admin', 'analyst'].includes(role.name));
+    currentUser.value.roles.some((role) => ['admin', 'analyst'].includes(role.name));
 });
+
+const formatReportPeriod = (report) => formatPeriod(report.date_from, report.date_to);
+const formatReportDateTime = (value) => formatDateTime(value);
 
 const loadCurrentUser = async () => {
   try {
-    const response = await window.axios.get('/api/me');
-    currentUser.value = response.data;
+    currentUser.value = await ensureCurrentUserLoaded();
   } catch (error) {
     currentUser.value = null;
   }
@@ -428,8 +405,7 @@ const loadCurrentUser = async () => {
 
 const loadDepartments = async () => {
   try {
-    const response = await window.axios.get('/api/departments');
-    departments.value = response.data || [];
+    departments.value = await fetchDepartments();
   } catch (error) {
     departments.value = [];
   }
@@ -437,8 +413,7 @@ const loadDepartments = async () => {
 
 const loadStatuses = async () => {
   try {
-    const response = await window.axios.get('/api/task-statuses');
-    statuses.value = response.data || [];
+    statuses.value = await fetchTaskStatuses();
   } catch (error) {
     statuses.value = [];
   }
@@ -448,11 +423,7 @@ const loadReports = async (page = 1) => {
   loading.value = true;
 
   try {
-    const response = await window.axios.get('/api/reports', {
-      params: { page },
-    });
-
-    const payload = response.data;
+    const payload = await fetchReports(page);
     reports.value = payload.data || [];
     pagination.current_page = payload.current_page || 1;
     pagination.last_page = payload.last_page || 1;
@@ -468,7 +439,7 @@ const createReport = async () => {
   createError.value = '';
 
   try {
-    await window.axios.post('/api/reports', {
+    await createReportRequest({
       name: form.name,
       date_from: form.date_from || null,
       date_to: form.date_to || null,
@@ -479,109 +450,28 @@ const createReport = async () => {
     await loadReports(1);
   } catch (error) {
     createError.value =
-      error?.response?.data?.message || 'Не удалось сформировать отчёт';
+      error?.response?.data?.message || 'Не удалось сформировать отчет';
   }
 };
 
 const destroyCharts = () => {
-  if (statusChart) {
-    statusChart.destroy();
-    statusChart = null;
-  }
-  if (priorityChart) {
-    priorityChart.destroy();
-    priorityChart = null;
-  }
-  if (closersChart) {
-    closersChart.destroy();
-    closersChart = null;
-  }
+  destroyReportCharts(chartInstances);
 };
 
 const renderCharts = async () => {
   if (!selectedReport.value || reportTab.value !== 'charts') return;
 
   await nextTick();
-  destroyCharts();
 
-  const statusData = selectedReport.value.data?.tasks_by_status || {};
-  const priorityData = selectedReport.value.data?.tasks_by_priority || {};
-  const closersData = selectedReport.value.data?.top_closers || [];
-
-  if (statusChartRef.value) {
-    statusChart = new Chart(statusChartRef.value, {
-      type: 'doughnut',
-      data: {
-        labels: Object.keys(statusData),
-        datasets: [
-          {
-            data: Object.values(statusData),
-            backgroundColor: chartPalette.slice(0, Object.keys(statusData).length),
-            borderWidth: 1,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: {
-            position: 'bottom',
-          },
-        },
-      },
-    });
-  }
-
-  if (priorityChartRef.value) {
-    const priorityLabels = Object.keys(priorityData);
-
-    priorityChart = new Chart(priorityChartRef.value, {
-      type: 'doughnut',
-      data: {
-        labels: priorityLabels,
-        datasets: [
-          {
-            data: Object.values(priorityData),
-            backgroundColor: priorityLabels.map(label => priorityColors[label] || '#6A90F0'),
-            borderWidth: 1,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: {
-            position: 'bottom',
-          },
-        },
-      },
-    });
-  }
-
-  if (closersChartRef.value) {
-    closersChart = new Chart(closersChartRef.value, {
-      type: 'bar',
-      data: {
-        labels: closersData.map(item => item.name),
-        datasets: [
-          {
-            label: 'Закрыто задач',
-            data: closersData.map(item => item.count),
-            backgroundColor: chartPalette.slice(0, closersData.length),
-            borderRadius: 8,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: {
-            display: false,
-          },
-        },
-      },
-    });
-  }
+  await renderReportCharts({
+    report: selectedReport.value,
+    refs: {
+      status: statusChartRef,
+      priority: priorityChartRef,
+      closers: closersChartRef,
+    },
+    instances: chartInstances,
+  });
 };
 
 const switchReportTab = async (tab) => {
@@ -589,6 +479,8 @@ const switchReportTab = async (tab) => {
 
   if (tab === 'charts') {
     await renderCharts();
+  } else {
+    destroyCharts();
   }
 };
 
@@ -597,33 +489,32 @@ const openReport = async (report) => {
   reportTab.value = 'charts';
 
   try {
-    const response = await window.axios.get(`/api/reports/${report.id}`);
-    selectedReport.value = response.data;
+    selectedReport.value = await fetchReport(report.id);
     reportModalInstance?.show();
     await renderCharts();
   } catch (error) {
-    reportError.value = 'Не удалось открыть отчёт';
+    reportError.value = 'Не удалось открыть отчет';
   }
 };
 
 const deleteReport = async () => {
   if (!selectedReport.value?.id) return;
 
-  const confirmed = window.confirm(`Удалить отчёт "${selectedReport.value.name}"?`);
+  const confirmed = window.confirm(`Удалить отчет "${selectedReport.value.name}"?`);
   if (!confirmed) return;
 
   deleting.value = true;
   reportError.value = '';
 
   try {
-    await window.axios.delete(`/api/reports/${selectedReport.value.id}`);
+    await deleteReportRequest(selectedReport.value.id);
     reportModalInstance?.hide();
     selectedReport.value = null;
     destroyCharts();
     await loadReports(1);
   } catch (error) {
     reportError.value =
-      error?.response?.data?.message || 'Не удалось удалить отчёт';
+      error?.response?.data?.message || 'Не удалось удалить отчет';
   } finally {
     deleting.value = false;
   }
@@ -632,28 +523,6 @@ const deleteReport = async () => {
 const goToPage = async (page) => {
   if (page < 1 || page > pagination.last_page) return;
   await loadReports(page);
-};
-
-const formatDate = (value) => {
-  if (!value) return '—';
-  return new Date(value).toLocaleString('ru-RU');
-};
-
-const formatPeriod = (report) => {
-  const from = report.date_from ? new Date(report.date_from).toLocaleDateString('ru-RU') : '—';
-  const to = report.date_to ? new Date(report.date_to).toLocaleDateString('ru-RU') : '—';
-  return `${from} — ${to}`;
-};
-
-const priorityLabel = (priority) => {
-  const map = {
-    low: 'Низкий',
-    medium: 'Средний',
-    high: 'Высокий',
-    critical: 'Критический',
-  };
-
-  return map[priority] || priority;
 };
 
 onMounted(async () => {

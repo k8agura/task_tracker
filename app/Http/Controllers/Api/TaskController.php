@@ -22,7 +22,7 @@ class TaskController extends Controller implements HasMiddleware
     public static function middleware(): array
     {
         return [
-            (new Middleware('permission:tasks.view'))->only(['index', 'show']),
+            (new Middleware('permission:tasks.view'))->only(['index', 'show', 'board']),
             (new Middleware('permission:tasks.create'))->only(['store']),
             (new Middleware('permission:tasks.update'))->only(['update', 'complete']),
             (new Middleware('permission:tasks.delete'))->only(['destroy']),
@@ -31,87 +31,34 @@ class TaskController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = Task::with([
+        $query = $this->buildTaskListingQuery($request, [
             'status',
             'creator',
             'performers',
             'chat',
         ]);
 
-        $user = $request->user();
-
-        if (!$user->hasRole('admin') && $user->department_id) {
-            $query->where(function ($q) use ($user) {
-                $q->where('creator_id', $user->id)
-                    ->orWhereHas('performers', function ($subQ) use ($user) {
-                        $subQ->where('users.id', $user->id);
-                    })
-                    ->orWhereHas('creator', function ($subQ) use ($user) {
-                        $subQ->where('department_id', $user->department_id);
-                    });
-            });
-        }
-
-        if ($request->filled('status_id')) {
-            $query->where('status_id', $request->integer('status_id'));
-        }
-
-        if ($request->filled('creator_id')) {
-            $query->where('creator_id', $request->integer('creator_id'));
-        }
-
-        if ($request->filled('performer_id')) {
-            $performerId = $request->integer('performer_id');
-            $query->whereHas('performers', function ($q) use ($performerId) {
-                $q->where('users.id', $performerId);
-            });
-        }
-
-        if ($request->filled('priority')) {
-            $query->where('priority', $request->input('priority'));
-        }
-
-        if ($request->filled('search')) {
-            $search = trim($request->input('search'));
-            $query->where(function ($q) use ($search) {
-                $q->where('title', 'like', "%{$search}%")
-                    ->orWhere('description', 'like', "%{$search}%");
-            });
-        }
-
-        if ($request->filled('due_date_from')) {
-            $query->whereDate('due_date', '>=', $request->input('due_date_from'));
-        }
-
-        if ($request->filled('due_date_to')) {
-            $query->whereDate('due_date', '<=', $request->input('due_date_to'));
-        }
-
-        $sort = $request->input('sort', 'newest');
-
-        switch ($sort) {
-            case 'oldest':
-                $query->orderBy('created_at', 'asc');
-                break;
-            case 'due_asc':
-                $query->orderByRaw('due_date IS NULL, due_date asc');
-                break;
-            case 'due_desc':
-                $query->orderByRaw('due_date IS NULL, due_date desc');
-                break;
-            case 'title_asc':
-                $query->orderBy('title', 'asc');
-                break;
-            case 'title_desc':
-                $query->orderBy('title', 'desc');
-                break;
-            case 'newest':
-            default:
-                $query->orderBy('created_at', 'desc');
-                break;
-        }
-
         return response()->json($query->paginate(15));
+    }
+
+    public function board(Request $request)
+    {
+        $query = $this->buildTaskListingQuery($request, [
+            'status:id,name,code',
+            'creator:id,first_name,last_name,middle_name',
+            'performers:id,first_name,last_name,middle_name',
+        ]);
+
+        return response()->json($query->get([
+            'id',
+            'title',
+            'description',
+            'priority',
+            'status_id',
+            'creator_id',
+            'due_date',
+            'created_at',
+        ]));
     }
 
     public function store(StoreTaskRequest $request)
@@ -348,6 +295,97 @@ class TaskController extends Controller implements HasMiddleware
         return $user->hasRole('admin')
             || $task->creator_id === $user->id
             || $task->performers()->where('users.id', $user->id)->exists();
+    }
+
+    private function buildTaskListingQuery(Request $request, array $with)
+    {
+        $query = Task::with($with);
+
+        $this->applyTaskVisibility($query, $request);
+        $this->applyTaskFilters($query, $request);
+        $this->applyTaskSorting($query, $request->input('sort', 'newest'));
+
+        return $query;
+    }
+
+    private function applyTaskVisibility($query, Request $request): void
+    {
+        $user = $request->user();
+
+        if (!$user->hasRole('admin') && $user->department_id) {
+            $query->where(function ($q) use ($user) {
+                $q->where('creator_id', $user->id)
+                    ->orWhereHas('performers', function ($subQ) use ($user) {
+                        $subQ->where('users.id', $user->id);
+                    })
+                    ->orWhereHas('creator', function ($subQ) use ($user) {
+                        $subQ->where('department_id', $user->department_id);
+                    });
+            });
+        }
+    }
+
+    private function applyTaskFilters($query, Request $request): void
+    {
+        if ($request->filled('status_id')) {
+            $query->where('status_id', $request->integer('status_id'));
+        }
+
+        if ($request->filled('creator_id')) {
+            $query->where('creator_id', $request->integer('creator_id'));
+        }
+
+        if ($request->filled('performer_id')) {
+            $performerId = $request->integer('performer_id');
+            $query->whereHas('performers', function ($q) use ($performerId) {
+                $q->where('users.id', $performerId);
+            });
+        }
+
+        if ($request->filled('priority')) {
+            $query->where('priority', $request->input('priority'));
+        }
+
+        if ($request->filled('search')) {
+            $search = trim($request->input('search'));
+            $query->where(function ($q) use ($search) {
+                $q->where('title', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%");
+            });
+        }
+
+        if ($request->filled('due_date_from')) {
+            $query->whereDate('due_date', '>=', $request->input('due_date_from'));
+        }
+
+        if ($request->filled('due_date_to')) {
+            $query->whereDate('due_date', '<=', $request->input('due_date_to'));
+        }
+    }
+
+    private function applyTaskSorting($query, string $sort): void
+    {
+        switch ($sort) {
+            case 'oldest':
+                $query->orderBy('created_at', 'asc');
+                break;
+            case 'due_asc':
+                $query->orderByRaw('due_date IS NULL, due_date asc');
+                break;
+            case 'due_desc':
+                $query->orderByRaw('due_date IS NULL, due_date desc');
+                break;
+            case 'title_asc':
+                $query->orderBy('title', 'asc');
+                break;
+            case 'title_desc':
+                $query->orderBy('title', 'desc');
+                break;
+            case 'newest':
+            default:
+                $query->orderBy('created_at', 'desc');
+                break;
+        }
     }
 
     private function buildSyncData(array $performers): array

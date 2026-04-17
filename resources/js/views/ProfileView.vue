@@ -80,7 +80,7 @@
             </div>
           </div>
 
-          <div class="d-flex justify-content-end gap-2 mt-4">
+          <div class="profile-form-actions d-flex justify-content-end gap-2 mt-4">
             <button class="btn btn-outline-secondary" @click="resetForm">
               Сбросить
             </button>
@@ -91,7 +91,7 @@
         </div>
 
         <div class="card-soft bg-white p-3 p-md-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="profile-task-header d-flex justify-content-between align-items-center mb-3">
             <h5 class="mb-0">Мои задачи</h5>
             <button class="btn btn-sm btn-outline-secondary" @click="loadMyTasks">
             Обновить
@@ -148,19 +148,19 @@
                     class="profile-task-row"
                     @click="openTask(task.id)"
                     >
-                    <td class="fw-semibold">#{{ task.id }}</td>
-                    <td>
+                    <td class="fw-semibold" data-label="ID">#{{ task.id }}</td>
+                    <td data-label="Название">
                         <div class="fw-semibold">{{ task.title }}</div>
                         <div class="small text-muted text-truncate-cell">
                         {{ task.description || 'Без описания' }}
                         </div>
                     </td>
-                    <td>
+                    <td data-label="Статус">
                         <span class="badge text-bg-primary">
                         {{ task.status?.name || '—' }}
                         </span>
                     </td>
-                    <td>{{ formatShortDate(task.due_date) || '—' }}</td>
+                    <td data-label="Срок">{{ formatShortDate(task.due_date) || '—' }}</td>
                     </tr>
                 </tbody>
                 </table>
@@ -189,19 +189,19 @@
                     class="profile-task-row"
                     @click="openTask(task.id)"
                     >
-                    <td class="fw-semibold">#{{ task.id }}</td>
-                    <td>
+                    <td class="fw-semibold" data-label="ID">#{{ task.id }}</td>
+                    <td data-label="Название">
                         <div class="fw-semibold">{{ task.title }}</div>
                         <div class="small text-muted text-truncate-cell">
                         {{ task.description || 'Без описания' }}
                         </div>
                     </td>
-                    <td>
+                    <td data-label="Статус">
                         <span class="badge text-bg-primary">
                         {{ task.status?.name || '—' }}
                         </span>
                     </td>
-                    <td>{{ formatShortDate(task.due_date) || '—' }}</td>
+                    <td data-label="Срок">{{ formatShortDate(task.due_date) || '—' }}</td>
                     </tr>
                 </tbody>
                 </table>
@@ -222,6 +222,8 @@
 import { onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import AppLayout from '../layouts/AppLayout.vue';
+import { fetchProfile, updateProfileRequest } from '../api/profile';
+import { fetchTasks } from '../api/tasks';
 
 const router = useRouter();
 
@@ -266,8 +268,7 @@ const loadProfile = async () => {
   errorMessage.value = '';
 
   try {
-    const response = await window.axios.get('/api/profile');
-    profile.value = response.data;
+    profile.value = await fetchProfile();
     fillForm();
   } catch (error) {
     profile.value = null;
@@ -284,20 +285,16 @@ const loadMyTasks = async () => {
 
   try {
     const [assignedResponse, createdResponse] = await Promise.all([
-      window.axios.get('/api/tasks', {
-        params: {
-          performer_id: profile.value.id,
-        },
+      fetchTasks({
+        performer_id: profile.value.id,
       }),
-      window.axios.get('/api/tasks', {
-        params: {
-          creator_id: profile.value.id,
-        },
+      fetchTasks({
+        creator_id: profile.value.id,
       }),
     ]);
 
-    assignedTasks.value = assignedResponse.data.data || [];
-    createdTasks.value = createdResponse.data.data || [];
+    assignedTasks.value = assignedResponse.data || [];
+    createdTasks.value = createdResponse.data || [];
   } catch (error) {
     assignedTasks.value = [];
     createdTasks.value = [];
@@ -318,7 +315,7 @@ const saveProfile = async () => {
   successMessage.value = '';
 
   try {
-    const response = await window.axios.put('/api/profile', {
+    const response = await updateProfileRequest({
       email: form.email,
       password: form.password || null,
       password_confirmation: form.password_confirmation || null,
@@ -385,5 +382,74 @@ onMounted(async () => {
 .nav-tabs .nav-link.active {
   color: #23414b;
   background: #f8fffd;
+}
+
+@media (max-width: 768px) {
+  .profile-form-actions {
+    flex-direction: column;
+  }
+
+  .profile-form-actions > .btn {
+    width: 100%;
+  }
+
+  .profile-task-header {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 0.75rem;
+  }
+
+  .text-truncate-cell {
+    max-width: none;
+    white-space: normal;
+  }
+}
+
+@media (max-width: 640px) {
+  .profile-task-table thead {
+    display: none;
+  }
+
+  .profile-task-table,
+  .profile-task-table tbody,
+  .profile-task-table tr,
+  .profile-task-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .profile-task-row {
+    display: grid;
+    gap: 0.4rem;
+    padding: 0.85rem 0.95rem;
+    border: 1px solid var(--border-soft);
+    border-radius: 18px;
+    background: var(--surface-1);
+    margin-bottom: 0.75rem;
+    box-shadow: var(--shadow-soft);
+  }
+
+  .profile-task-row td {
+    padding: 0;
+    border: none;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .profile-task-row td::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    flex: 0 0 6.5rem;
+  }
+
+  .profile-task-row:hover td {
+    background-color: transparent !important;
+  }
 }
 </style>

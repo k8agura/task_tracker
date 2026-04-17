@@ -1,12 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import LoginView from '../views/LoginView.vue';
-import DashboardView from '../views/DashboardView.vue';
-import TasksView from '../views/TasksView.vue';
-import TaskDetailsView from '../views/TaskDetailsView.vue';
-import UsersView from '../views/UsersView.vue';
-import ReportsView from '../views/ReportsView.vue';
 import { isAuthenticated } from '../services/auth';
-import ProfileView from '../views/ProfileView.vue';
+import { ensureCurrentUserLoaded, useAuthState } from '../services/authState';
+import { setAuthToken } from '../api/client';
+
+const LoginView = () => import('../views/LoginView.vue');
+const DashboardView = () => import('../views/DashboardView.vue');
+const TasksView = () => import('../views/TasksView.vue');
+const TaskDetailsView = () => import('../views/TaskDetailsView.vue');
+const UsersView = () => import('../views/UsersView.vue');
+const ReportsView = () => import('../views/ReportsView.vue');
+const ProfileView = () => import('../views/ProfileView.vue');
+const UserProfileView = () => import('../views/UserProfileView.vue');
 
 const routes = [
     {
@@ -56,6 +60,13 @@ const routes = [
         component: ProfileView,
         meta: { requiresAuth: true },
     },
+    {
+        path: '/team/:id',
+        name: 'user-profile',
+        component: UserProfileView,
+        meta: { requiresAuth: true },
+        props: true,
+    },
 ];
 
 const router = createRouter({
@@ -68,6 +79,9 @@ const router = createRouter({
 
 router.beforeEach(async (to) => {
     const auth = isAuthenticated();
+    const token = localStorage.getItem('token');
+
+    setAuthToken(token);
 
     if (to.meta.requiresAuth && !auth) {
         return '/login';
@@ -79,14 +93,10 @@ router.beforeEach(async (to) => {
 
     if (to.meta.requiresAdmin) {
         try {
-            const token = localStorage.getItem('token');
-            if (token) {
-                window.axios.defaults.headers.common.Authorization = `Bearer ${token}`;
-            }
-
-            const response = await window.axios.get('/api/me');
-            const user = response.data;
-            const isAdmin = Array.isArray(user?.roles) && user.roles.some(role => role.name === 'admin');
+            const { currentUser } = useAuthState();
+            const user = await ensureCurrentUserLoaded();
+            const isAdmin = Array.isArray((currentUser.value || user)?.roles) &&
+                (currentUser.value || user).roles.some(role => role.name === 'admin');
 
             if (!isAdmin) {
                 return '/dashboard';

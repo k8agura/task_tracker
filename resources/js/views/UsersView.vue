@@ -1,7 +1,7 @@
 <template>
   <AppLayout>
-    <div class="d-flex flex-column flex-lg-row justify-content-lg-end align-items-lg-center gap-3 mb-3">
-      <div class="d-flex gap-2 flex-wrap">
+    <div class="page-actions d-flex flex-column flex-lg-row justify-content-lg-end align-items-lg-center gap-3 mb-3">
+      <div class="d-flex gap-2 flex-wrap page-actions-group">
         <button class="btn btn-outline-secondary" @click="resetFilters">
           Сбросить
         </button>
@@ -89,13 +89,13 @@
               class="user-row-click"
               @click="openEditModal(user)"
             >
-              <td>
+              <td data-label="Пользователь">
                 <div class="fw-semibold">{{ fullName(user) }}</div>
               </td>
-              <td>{{ user.email }}</td>
-              <td>{{ user.position || '—' }}</td>
-              <td>{{ user.department?.name || '—' }}</td>
-              <td>
+              <td data-label="Email">{{ user.email }}</td>
+              <td data-label="Должность">{{ user.position || '—' }}</td>
+              <td data-label="Подразделение">{{ user.department?.name || '—' }}</td>
+              <td data-label="Роли">
                 <div class="d-flex gap-1 flex-wrap">
                   <span
                     v-for="role in user.roles"
@@ -106,7 +106,7 @@
                   </span>
                 </div>
               </td>
-              <td>
+              <td data-label="Статус">
                 <span
                   class="badge"
                   :class="user.is_active ? 'text-bg-success' : 'text-bg-secondary'"
@@ -374,6 +374,8 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { Modal } from 'bootstrap';
 import AppLayout from '../layouts/AppLayout.vue';
+import { fetchDepartments } from '../api/lookups';
+import { createUserRequest, deleteUserRequest, fetchUser, fetchUsers, updateUserRequest } from '../api/users';
 
 const users = ref([]);
 const departments = ref([]);
@@ -445,7 +447,7 @@ const deleteUser = async () => {
   editSuccess.value = '';
 
   try {
-    await window.axios.delete(`/api/users/${editForm.id}`);
+    await deleteUserRequest(editForm.id);
     await loadUsers(pagination.current_page);
     closeEditModal();
   } catch (error) {
@@ -474,8 +476,7 @@ const fullName = (user) => {
 
 const loadDepartments = async () => {
   try {
-    const response = await window.axios.get('/api/departments');
-    departments.value = response.data || [];
+    departments.value = await fetchDepartments();
   } catch (error) {
     departments.value = [];
   }
@@ -492,8 +493,7 @@ const loadUsers = async (page = 1) => {
     if (filters.department_id) params.department_id = filters.department_id;
     if (filters.is_active !== '') params.is_active = filters.is_active;
 
-    const response = await window.axios.get('/api/users', { params });
-    const payload = response.data;
+    const payload = await fetchUsers(params);
 
     users.value = payload.data || [];
     pagination.current_page = payload.current_page || 1;
@@ -551,7 +551,7 @@ const createUser = async () => {
   createError.value = '';
 
   try {
-    await window.axios.post('/api/users', {
+    await createUserRequest({
       last_name: createForm.last_name,
       first_name: createForm.first_name,
       middle_name: createForm.middle_name,
@@ -579,8 +579,7 @@ const openEditModal = async (user) => {
   editSuccess.value = '';
 
   try {
-    const response = await window.axios.get(`/api/users/${user.id}`);
-    const data = response.data;
+    const data = await fetchUser(user.id);
 
     editForm.id = data.id;
     editForm.last_name = data.last_name || '';
@@ -606,7 +605,7 @@ const updateUser = async () => {
   editSuccess.value = '';
 
   try {
-    await window.axios.put(`/api/users/${editForm.id}`, {
+    await updateUserRequest(editForm.id, {
       last_name: editForm.last_name,
       first_name: editForm.first_name,
       middle_name: editForm.middle_name,
@@ -675,6 +674,10 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.page-actions-group > .btn {
+  min-width: 148px;
+}
+
 .user-table th {
   font-size: 0.9rem;
   color: #5b7b84;
@@ -694,5 +697,64 @@ onMounted(async () => {
 
 .user-row-click:hover td {
   background-color: rgba(70, 125, 135, 0.18) !important;
+}
+
+@media (max-width: 768px) {
+  .page-actions-group {
+    width: 100%;
+  }
+
+  .page-actions-group > .btn {
+    flex: 1 1 calc(50% - 0.5rem);
+    min-width: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .user-table thead {
+    display: none;
+  }
+
+  .user-table,
+  .user-table tbody,
+  .user-table tr,
+  .user-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .user-row-click {
+    display: grid;
+    gap: 0.4rem;
+    padding: 0.85rem 0.95rem;
+    border: 1px solid var(--border-soft);
+    border-radius: 18px;
+    background: var(--surface-1);
+    margin-bottom: 0.75rem;
+    box-shadow: var(--shadow-soft);
+  }
+
+  .user-row-click td {
+    padding: 0;
+    border: none;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .user-row-click td::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    flex: 0 0 7rem;
+  }
+
+  .user-row-click:hover td {
+    background-color: transparent !important;
+  }
 }
 </style>
